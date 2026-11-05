@@ -1,0 +1,140 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --seaside-light: #E7ECEF;
+  --seaside-dark: #274C77;
+  --seaside-blue: #6096BA;
+  --seaside-soft: #A3CEF1;
+  --background: #F7F9FA;
+  --surface: #FFFFFF;
+  --text-primary: #1D2C3B;
+  --text-secondary: #647587;
+  --border-subtle: #DCE4E9;
+  --success: #39856A;
+  --warning: #B78032;
+  --danger: #B85C5C;
+}
+
+@theme inline {
+  --color-seaside-light: #E7ECEF;
+  --color-seaside-dark: #274C77;
+  --color-seaside-blue: #6096BA;
+  --color-seaside-soft: #A3CEF1;
+  --color-background: #F7F9FA;
+  --color-surface: #FFFFFF;
+  --color-ink: #1D2C3B;
+  --color-muted: #647587;
+  --color-line: #DCE4E9;
+  --color-success: #39856A;
+  --color-warning: #B78032;
+  --color-danger: #B85C5C;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  background: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display { font-family: var(--font-display); }
+
+::selection { background: #A3CEF1; color: #1D2C3B; }
+
+/* grain texture */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.28'/%3E%3C/svg%3E");
+}
+
+/* cut corner panel */
+.cut-corner {
+  clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 0 100%);
+}
+.cut-corner-sm {
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+}
+.cut-both {
+  clip-path: polygon(22px 0, 100% 0, 100% calc(100% - 22px), calc(100% - 22px) 100%, 0 100%, 0 22px);
+}
+
+/* ticket perforation */
+.ticket-divider {
+  background-image: linear-gradient(to right, #DCE4E9 45%, transparent 45%);
+  background-size: 10px 1.5px;
+  background-repeat: repeat-x;
+  height: 1.5px;
+}
+
+/* organic blob */
+.blob {
+  position: absolute;
+  filter: blur(2px);
+  pointer-events: none;
+}
+
+/* mesh header */
+.mesh-header {
+  background:
+    radial-gradient(600px 320px at 12% 10%, rgba(163,206,241,0.55), transparent 60%),
+    radial-gradient(520px 300px at 88% 20%, rgba(96,150,186,0.28), transparent 62%),
+    radial-gradient(700px 380px at 50% 110%, rgba(39,76,119,0.14), transparent 60%),
+    linear-gradient(180deg, #FFFFFF 0%, #E7ECEF 100%);
+}
+
+/* orbital ring animation */
+@keyframes slow-spin { to { transform: rotate(360deg); } }
+.orbit-slow { animation: slow-spin 28s linear infinite; }
+.orbit-slower { animation: slow-spin 46s linear infinite reverse; }
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit-slow, .orbit-slower { animation: none; }
+  html { scroll-behavior: auto; }
+  * { transition-duration: 0.01ms !important; }
+}
+
+/* timeline connector */
+.timeline-spine::before {
+  content: "";
+  position: absolute;
+  left: 19px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: linear-gradient(180deg, #274C77 0%, #6096BA 55%, #DCE4E9 100%);
+  opacity: 0.35;
+  border-radius: 999px;
+}
+
+/* custom scrollbar */
+.nice-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.nice-scroll::-webkit-scrollbar-thumb { background: #C6D5DE; border-radius: 999px; }
+.nice-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* focus */
+:focus-visible {
+  outline: 2px solid #6096BA;
+  outline-offset: 2px;
+}
+
+/* animations */
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.rise { animation: rise 0.55s cubic-bezier(0.22,1,0.36,1) both; }
+.rise-1 { animation-delay: 0.06s; }
+.rise-2 { animation-delay: 0.12s; }
+.rise-3 { animation-delay: 0.18s; }
+.rise-4 { animation-delay: 0.24s; }
+
+@keyframes pulse-dot { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.55; } }
+.pulse-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+
+input, select, textarea { font-family: inherit; }
