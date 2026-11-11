@@ -1,6 +1,6 @@
 # Kelar.in
 
-Kelari.in adalah prototipe web untuk melacak permohonan dokumen administrasi publik, mulai dari pengajuan, verifikasi, review, hingga penerbitan, lengkap dengan riwayat status yang transparan. Seluruh data bersifat demonstrasi dan bukan layanan pemerintah resmi.
+Kelar.in adalah prototipe web untuk melacak permohonan dokumen administrasi publik, mulai dari pengajuan, verifikasi, review, hingga penerbitan, lengkap dengan riwayat status yang transparan. Seluruh data bersifat demonstrasi dan bukan layanan pemerintah resmi.
 
 ## Tech Stack
 
