@@ -9,11 +9,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "better-auth": "^1.7.16",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
-    "lucide-react": "^1.67.0",
-    "mysql2": "^3.24.6",
+    "lucide-react": "^1.71.0",
     "next": "16.2.6",
     "pg": "8.20.0",
     "react": "19.2.6",

@@ -1,134 +1,208 @@
-// CivicFlow — Drizzle ORM schema (PostgreSQL in this sandbox).
-// Portable to MySQL (`mysql2`) for the SvelteKit target: identical table/column
-// names, only the column builders change (pg-core -> mysql-core).
-// See `sveltekit-reference/README.md` for the 1:1 MySQL variant + Netlify adapter wiring.
 import {
-  boolean,
-  integer,
-  jsonb,
   pgTable,
+  uuid,
   text,
+  varchar,
+  integer,
+  boolean,
   timestamp,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
-// ------------------------------------------------------------- better-auth core
-// Tables required by the better-auth drizzle adapter (provider: "pg").
-// Extra columns (`role`, `passwordHash`) extend the default model for the demo.
-export const user = pgTable("user", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  emailVerified: boolean("email_verified").notNull().default(false),
-  image: text("image"),
-  role: text("role").notNull().default("citizen"),
-  // Demo-only credential reference (mock hash). better-auth email/password
-  // normally uses the `account` table; this column keeps the seeded demo
-  // logins working without an SMTP / verification round-trip.
-  passwordHash: text("password_hash").notNull().default(""),
-  avatarColor: text("avatar_color").default("#274C77"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+// ---- Users ----
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 160 }).notNull(),
+  email: varchar("email", { length: 200 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: varchar("role", { length: 20 }).notNull().default("WARGA"),
+  phone: varchar("phone", { length: 40 }),
+  address: text("address"),
+  nik: varchar("nik", { length: 32 }),
+  rt: varchar("rt", { length: 10 }),
+  rw: varchar("rw", { length: 10 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const session = pgTable("session", {
-  id: text("id").primaryKey(),
+export const sessions = pgTable("sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 128 }).notNull().unique(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  token: text("token").notNull().unique(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
-  userId: text("user_id")
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ---- Services ----
+export const serviceTypes = pgTable("service_types", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: varchar("slug", { length: 80 }).notNull().unique(),
+  name: varchar("name", { length: 160 }).notNull(),
+  description: text("description").notNull(),
+  category: varchar("category", { length: 80 }).notNull().default("Keterangan"),
+  icon: varchar("icon", { length: 40 }).notNull().default("file"),
+  baseSlaDays: integer("base_sla_days").notNull().default(3),
+  prioritySlaDays: integer("priority_sla_days").notNull().default(1),
+  priorityEnabled: boolean("priority_enabled").notNull().default(false),
+  requiresCamat: boolean("requires_camat").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  conditions: jsonb("conditions").default([]),
+  slaNote: text("sla_note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const serviceRequirements = pgTable("service_requirements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  serviceTypeId: uuid("service_type_id")
     .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
+    .references(() => serviceTypes.id, { onDelete: "cascade" }),
+  key: varchar("key", { length: 80 }).notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  description: text("description"),
+  whyNeeded: text("why_needed"),
+  requirementType: varchar("requirement_type", { length: 20 }).notNull().default("WAJIB"),
+  conditionField: varchar("condition_field", { length: 80 }),
+  conditionValues: jsonb("condition_values").default([]),
+  needsEvidence: boolean("needs_evidence").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
 });
 
-export const account = pgTable("account", {
-  id: text("id").primaryKey(),
-  accountId: text("account_id").notNull(),
-  providerId: text("provider_id").notNull(),
-  userId: text("user_id")
+// ---- Applications ----
+export const applications = pgTable("applications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationNumber: varchar("application_number", { length: 40 }).notNull().unique(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  serviceTypeId: uuid("service_type_id")
     .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  accessToken: text("access_token"),
-  refreshToken: text("refresh_token"),
-  idToken: text("id_token"),
-  accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
-  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
-  scope: text("scope"),
-  password: text("password"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const verification = pgTable("verification", {
-  id: text("id").primaryKey(),
-  identifier: text("identifier").notNull(),
-  value: text("value").notNull(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-// ------------------------------------------------------------- CivicFlow domain
-export const procedures = pgTable("procedures", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  category: text("category").notNull().default("General"),
-  description: text("description").notNull().default(""),
-  eligibility: jsonb("eligibility").$type<string[]>().notNull().default([]),
-  requiredDocuments: jsonb("required_documents").$type<string[]>().notNull().default([]),
-  procedureSteps: jsonb("procedure_steps")
-    .$type<{ title: string; detail: string; duration: string }[]>()
-    .notNull()
-    .default([]),
-  responsibleDepartment: text("responsible_department").notNull().default("Front Office"),
-  processingTarget: text("processing_target").notNull().default(""),
-  processingDays: integer("processing_days").notNull().default(7),
-  commonPitfalls: jsonb("common_pitfalls").$type<string[]>().notNull().default([]),
-  sourceReference: text("source_reference").notNull().default(""),
-  lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const adminRequests = pgTable("admin_requests", {
-  id: text("id").primaryKey(),
-  ownerId: text("owner_id").notNull(),
-  documentType: text("document_type").notNull(),
-  title: text("title").notNull(),
-  description: text("description").notNull().default(""),
-  status: text("status").notNull().default("submitted"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  targetCompletionAt: timestamp("target_completion_at", { withTimezone: true }).notNull().defaultNow(),
-  assignedDepartment: text("assigned_department").notNull().default("Front Office"),
-  requiredActions: jsonb("required_actions").$type<string[]>().notNull().default([]),
+    .references(() => serviceTypes.id),
+  status: varchar("status", { length: 40 }).notNull().default("MENUNGGU_VERIFIKASI"),
+  formData: jsonb("form_data").default({}),
+  citizenNote: text("citizen_note"),
+  isPriority: boolean("is_priority").notNull().default(false),
+  priorityReason: varchar("priority_reason", { length: 80 }),
+  priorityReasonDetail: text("priority_reason_detail"),
+  priorityEvidencePath: text("priority_evidence_path"),
+  priorityStatus: varchar("priority_status", { length: 20 }).notNull().default("NONE"),
+  priorityNote: text("priority_note"),
+  priorityDecidedBy: uuid("priority_decided_by").references(() => users.id),
+  priorityDecidedAt: timestamp("priority_decided_at", { withTimezone: true }),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  slaStartedAt: timestamp("sla_started_at", { withTimezone: true }),
+  dueAt: timestamp("due_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  pausedAt: timestamp("paused_at", { withTimezone: true }),
+  accumulatedPauseSeconds: integer("accumulated_pause_seconds").notNull().default(0),
   delayReason: text("delay_reason"),
-  escalationFlag: boolean("escalation_flag").notNull().default(false),
-  metadata: jsonb("metadata").$type<Record<string, string>>().notNull().default({}),
+  letterPath: text("letter_path"),
+  letterNumber: varchar("letter_number", { length: 80 }),
+  staffHandlerId: uuid("staff_handler_id").references(() => users.id),
+  currentNote: text("current_note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const requestHistory = pgTable("request_history", {
-  id: text("id").primaryKey(),
-  requestId: text("request_id").notNull(),
-  previousStatus: text("previous_status").notNull().default("—"),
-  newStatus: text("new_status").notNull(),
-  explanation: text("explanation").notNull().default(""),
-  actorId: text("actor_id").notNull().default("system"),
-  actorName: text("actor_name").notNull().default("System"),
-  actorRole: text("actor_role").notNull().default("system"),
-  timestamp: timestamp("timestamp", { withTimezone: true }).notNull().defaultNow(),
+export const applicationDocuments = pgTable("application_documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  requirementKey: varchar("requirement_key", { length: 80 }).notNull(),
+  requirementName: varchar("requirement_name", { length: 200 }),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  fileType: varchar("file_type", { length: 100 }),
+  fileSize: integer("file_size"),
+  filePath: text("file_path").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("MENUNGGU"),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const approvalSteps = pgTable("approval_steps", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  stage: varchar("stage", { length: 20 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("MENUNGGU"),
+  actorId: uuid("actor_id").references(() => users.id),
+  note: text("note"),
+  actedAt: timestamp("acted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const applicationEvents = pgTable("application_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  actorId: uuid("actor_id").references(() => users.id),
+  actorName: varchar("actor_name", { length: 160 }),
+  actorRole: varchar("actor_role", { length: 20 }),
+  previousStatus: varchar("previous_status", { length: 40 }),
+  newStatus: varchar("new_status", { length: 40 }),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const notifications = pgTable("notifications", {
-  id: text("id").primaryKey(),
-  recipientId: text("recipient_id").notNull(),
-  requestId: text("request_id"),
-  title: text("title").notNull(),
-  message: text("message").notNull().default(""),
-  type: text("type").notNull().default("info"),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  applicationId: uuid("application_id").references(() => applications.id, {
+    onDelete: "cascade",
+  }),
+  type: varchar("type", { length: 60 }).notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
   isRead: boolean("is_read").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  link: varchar("link", { length: 255 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export type DbUser = typeof user.$inferSelect;
-export type DbAdminRequest = typeof adminRequests.$inferSelect;
+export const ratings = pgTable("ratings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .unique()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  citizenId: uuid("citizen_id").notNull().references(() => users.id),
+  staffId: uuid("staff_id").references(() => users.id),
+  lurahId: uuid("lurah_id").references(() => users.id),
+  score: integer("score").notNull(),
+  category: varchar("category", { length: 40 }).notNull().default("KECEPATAN"),
+  comment: text("comment"),
+  contextTag: varchar("context_tag", { length: 80 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const slaConfig = pgTable("sla_config", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  key: varchar("key", { length: 80 }).notNull().unique(),
+  value: jsonb("value"),
+  description: text("description"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorId: uuid("actor_id").references(() => users.id),
+  action: varchar("action", { length: 120 }).notNull(),
+  entity: varchar("entity", { length: 80 }).notNull(),
+  entityId: varchar("entity_id", { length: 80 }),
+  details: jsonb("details"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type UserRole = "WARGA" | "PETUGAS" | "RT_RW" | "LURAH" | "CAMAT";
+export type AppStatus =
+  | "MENUNGGU_VERIFIKASI"
+  | "MENUNGGU_WARGA"
+  | "TERVERIFIKASI"
+  | "SEDANG_DIPROSES"
+  | "MENUNGGU_RT_RW"
+  | "MENUNGGU_LURAH"
+  | "MENUNGGU_CAMAT"
+  | "FINALISASI"
+  | "SELESAI"
+  | "DITOLAK";

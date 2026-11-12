@@ -1,56 +1,51 @@
-import { and, eq } from "drizzle-orm";
+import { NextResponse } from "next/server";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications } from "@/db/schema";
+import { getSessionUser } from "@/lib/auth";
 
-export const dynamic = "force-dynamic";
-
-// GET /api/notifications?recipientId=... — inbox list (newest first via client sort).
 export async function GET(req: Request) {
-  try {
-    const url = new URL(req.url);
-    const recipientId = url.searchParams.get("recipientId");
-    const rows = recipientId
-      ? await db.select().from(notifications).where(eq(notifications.recipientId, recipientId))
-      : await db.select().from(notifications);
-    return Response.json({
-      ok: true,
-      notifications: rows.map((n) => ({
-        id: n.id,
-        recipientId: n.recipientId,
-        requestId: n.requestId ?? undefined,
-        title: n.title,
-        message: n.message,
-        type: n.type,
-        isRead: n.isRead,
-        createdAt: n.createdAt instanceof Date ? n.createdAt.toISOString() : new Date(n.createdAt).toISOString(),
-      })),
-    });
-  } catch (e) {
-    console.error("[notifications GET]", e);
-    return Response.json({ ok: false }, { status: 500 });
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { searchParams } = new URL(req.url);
+  if (searchParams.get("unread") === "1") {
+    const rows = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.userId, user.id), eq(notifications.isRead, false)));
+    return NextResponse.json({ unread: rows.length });
   }
+  const rows = await db
+    .select()
+    .from(notifications)
+    .where(eq(notifications.userId, user.id))
+    .orderBy(desc(notifications.createdAt))
+    .limit(60);
+  return NextResponse.json({ notifications: rows });
 }
 
-// PATCH /api/notifications — { ids: string[], isRead: boolean } bulk update.
 export async function PATCH(req: Request) {
-  try {
-    const body = await req.json();
-    const ids: string[] = Array.isArray(body.ids) ? body.ids : [];
-    const isRead = body.isRead !== false;
-    const recipientId: string | undefined = body.recipientId;
-    for (const id of ids.slice(0, 200)) {
-      if (recipientId) {
-        await db
-          .update(notifications)
-          .set({ isRead })
-          .where(and(eq(notifications.id, id), eq(notifications.recipientId, recipientId)));
-      } else {
-        await db.update(notifications).set({ isRead }).where(eq(notifications.id, id));
-      }
-    }
-    return Response.json({ ok: true, updated: ids.length });
-  } catch (e) {
-    console.error("[notifications PATCH]", e);
-    return Response.json({ ok: false }, { status: 500 });
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const body = await req.json().catch(() => ({}));
+  const { ids, all } = body as { ids?: string[]; all?: boolean };
+  if (all) {
+    const { eq: eq2 } = await import("drizzle-orm");
+    await db.update(notifications).set({ isRead: true }).where(eq2(notifications.userId, user.id));
+    return NextResponse.json({ ok: true });
   }
+  if (ids?.length) {
+    for (const id of ids) {
+      await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+    }
+    return NextResponse.json({ ok: true });
+  }
+  // single id via ?id=
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+  if (id) {
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+    return NextResponse.json({ ok: true });
+  }
+  return NextResponse.json({ error: "Parameter tidak valid." }, { status: 400 });
 }

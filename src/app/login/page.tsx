@@ -1,128 +1,94 @@
 "use client";
-
-import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Landmark, ShieldAlert } from "lucide-react";
-import { useCivic, roleHome } from "@/lib/store";
-import { DEMO_PASSWORD } from "@/data/seed";
-import { Field, inputCls } from "@/components/ui";
+import { useState } from "react";
+import { PublicNav, PublicFooter } from "@/components/Public";
+import { Field, ToastHost, toast } from "@/components/ui";
+import { loginLocal } from "@/lib/mock-api";
+
+function getRoleRedirectPath(role: string) {
+  const paths: Record<string, string> = { WARGA: "/dashboard", PETUGAS: "/verifikasi", RT_RW: "/persetujuan", LURAH: "/dashboard", CAMAT: "/persetujuan" };
+  return paths[role] ?? "/dashboard";
+}
+
+const DEMO = [
+  { role: "Warga", email: "warga@kelar.in", pass: "warga123" },
+  { role: "Petugas", email: "petugas@kelar.in", pass: "petugas123" },
+  { role: "RT/RW", email: "rtrw@kelar.in", pass: "rtrw123" },
+  { role: "Lurah", email: "lurah@kelar.in", pass: "lurah123" },
+  { role: "Camat", email: "camat@kelar.in", pass: "camat123" },
+];
 
 export default function LoginPage() {
-  const { login, user, ready } = useCivic();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
-  React.useEffect(() => {
-    if (ready && user) router.replace(roleHome(user.role));
-  }, [ready, user, router]);
-
-  const submit = (e: React.FormEvent) => {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-    if (!email.trim() || !password) {
-      setError("Please enter both email and password.");
-      return;
-    }
-    setBusy(true);
-    const res = login(email, password);
-    setBusy(false);
-    if (!res.ok) {
-      setError(res.error ?? "Sign-in failed.");
-      return;
-    }
-    const stored = localStorage.getItem("civicflow/users/v1");
-    // route by role
+    setErr("");
+    if (!email || !password) { setErr("Email dan password wajib diisi."); return; }
+    setLoading(true);
     try {
-      const users = stored ? JSON.parse(stored) : [];
-      const found = users.find((u: { email: string; role: string }) => u.email.toLowerCase() === email.trim().toLowerCase());
-      router.push(found?.role === "admin" ? "/admin" : "/dashboard");
-    } catch {
-      router.push("/dashboard");
+      const user = loginLocal(email, password);
+      if (!user) { setErr("Email atau password salah."); return; }
+      toast("Login berhasil. Mengalihkan…", "ok");
+      router.push(getRoleRedirectPath(user.role));
+      router.refresh();
+    } catch (error) {
+      console.error("Login dummy gagal.", error);
+      setErr("Login gagal. Coba lagi.");
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const fill = (e: string) => {
-    setEmail(e);
-    setPassword(DEMO_PASSWORD);
-    setError("");
-  };
+  }
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1fr_1fr]">
-      <div className="mesh-header grain relative hidden overflow-hidden lg:block">
-        <div className="blob left-10 top-16 h-64 w-64 rounded-[46%_54%_52%_48%/48%_46%_54%_52%] bg-gradient-to-br from-[#A3CEF1] to-white opacity-70 blur-2xl" />
-        <div className="absolute inset-0 flex flex-col justify-between p-12">
-          <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-[#274C77] to-[#6096BA] text-white">
-              <Landmark size={18} />
-            </span>
-            <span className="font-display text-xl font-semibold">CivicFlow</span>
-          </Link>
-          <div className="max-w-md">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#274C77]">Welcome back</p>
-            <h1 className="font-display mt-3 text-4xl leading-tight font-medium">Pick up exactly where your files left off.</h1>
-            <div className="mt-6 flex items-center gap-5">
-              <div className="relative h-24 w-24">
-                <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90">
-                  <circle cx="40" cy="40" r="32" stroke="#FFFFFFAA" strokeWidth="9" fill="none" />
-                  <circle cx="40" cy="40" r="32" stroke="#274C77" strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray="201" strokeDashoffset="60" />
-                </svg>
-                <span className="absolute inset-0 grid place-items-center text-sm font-bold text-[#274C77]">70%</span>
-              </div>
-              <p className="text-sm leading-relaxed text-[#4A5C6E]">3 files in progress · 1 needs your attention · all history preserved across refreshes.</p>
+    <div className="min-h-screen bg-[#faf5ef]">
+      <ToastHost />
+      <PublicNav />
+      <main className="mx-auto grid max-w-5xl gap-6 px-4 py-10 sm:px-6 lg:grid-cols-2">
+        <div className="hero-plum rounded-[24px] p-7 text-white">
+          <h1 className="text-[28px] font-extrabold leading-tight">Selamat datang kembali di kelar.in</h1>
+          <p className="mt-2 text-sm text-white/75">Pantau pengajuan dan urus kebutuhan administrasi Anda dengan lebih mudah.</p>
+          <div className="mt-5 rounded-2xl bg-white/10 p-4">
+            <p className="text-[13px] font-extrabold">Akun demo (klik untuk isi otomatis)</p>
+            <div className="mt-2 grid gap-1.5">
+              {DEMO.map((d) => (
+                <button
+                  key={d.email}
+                  onClick={() => { setEmail(d.email); setPassword(d.pass); }}
+                  className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-left text-[12px] font-bold hover:bg-white/20"
+                >
+                  <span className="rounded-full bg-white/20 px-2 py-0.5">{d.role}</span>
+                  <span className="truncate">{d.email} / {d.pass}</span>
+                </button>
+              ))}
             </div>
           </div>
-          <p className="text-xs text-[#647587]">Mock authentication — credentials stay in your browser and are never sent anywhere.</p>
+          <p className="mt-3 text-[12px] text-white/60">Seluruh akun & data adalah simulasi demo.</p>
         </div>
-      </div>
-
-      <div className="flex items-center justify-center bg-[#F7F9FA] px-5 py-10">
-        <div className="w-full max-w-md">
-          <Link href="/" className="mb-6 flex items-center gap-2.5 lg:hidden">
-            <span className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-[#274C77] to-[#6096BA] text-white"><Landmark size={16} /></span>
-            <span className="font-display text-lg font-semibold">CivicFlow</span>
-          </Link>
-          <h2 className="font-display text-3xl font-medium">Sign in</h2>
-          <p className="mt-2 text-sm text-[#647587]">Access your dashboard, requests, and inbox.</p>
-
-          <div className="mt-5 rounded-2xl border border-dashed border-[#6096BA66] bg-white p-4 text-[13px]">
-            <p className="font-semibold text-[#274C77]">Demo accounts — password <code className="rounded bg-[#E7ECEF] px-1.5 py-0.5 font-mono">civic1234</code></p>
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              <button onClick={() => fill("citizen@example.com")} className="rounded-full border border-[#DCE4E9] bg-[#F7F9FA] px-3.5 py-1.5 text-xs font-semibold text-[#274C77] transition hover:border-[#6096BA]">
-                citizen@example.com
-              </button>
-              <button onClick={() => fill("admin@example.com")} className="rounded-full border border-[#DCE4E9] bg-[#F7F9FA] px-3.5 py-1.5 text-xs font-semibold text-[#274C77] transition hover:border-[#6096BA]">
-                admin@example.com
-              </button>
-            </div>
-          </div>
-
-          <form onSubmit={submit} className="mt-5 space-y-4 rounded-3xl border border-[#DCE4E9] bg-white p-6" noValidate>
-            <Field label="Email address" error={undefined}>
-              <input className={inputCls} type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email address" />
+        <div className="card-soft p-7">
+          <h2 className="text-xl font-extrabold">Login</h2>
+          <p className="mt-1 text-sm text-[#7a6f6a]">Masuk sesuai role untuk membuka dashboard masing-masing.</p>
+          <form onSubmit={submit} className="mt-5 space-y-4">
+            <Field label="Email" required error={undefined}>
+              <input className="input-soft" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nama@kelar.in" autoComplete="email" />
             </Field>
-            <Field label="Password">
-              <input className={inputCls} type="password" autoComplete="current-password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} aria-label="Password" />
+            <Field label="Password" required>
+              <input className="input-soft" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" autoComplete="current-password" />
             </Field>
-            {error && (
-              <p role="alert" className="flex items-start gap-2 rounded-xl bg-[#F3DEDE] px-3.5 py-2.5 text-[13px] font-medium text-[#8E4444]">
-                <ShieldAlert size={15} className="mt-0.5 shrink-0" /> {error}
-              </p>
-            )}
-            <button disabled={busy} className="cut-corner-sm flex w-full items-center justify-center gap-2 bg-[#274C77] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1e3c5e] disabled:opacity-60">
-              {busy ? "Signing in…" : <>Sign in <ArrowRight size={15} /></>}
+            {err && <p className="rounded-xl bg-red-50 px-3 py-2.5 text-[13px] font-bold text-[#991b1b]">{err}</p>}
+            <button disabled={loading} className="btn-primary w-full rounded-xl px-4 py-3 text-sm font-extrabold disabled:opacity-60">
+              {loading ? "Memeriksa…" : "Masuk"}
             </button>
-            <p className="text-center text-[13px] text-[#647587]">
-              New to CivicFlow? <Link href="/register" className="font-semibold text-[#274C77] underline underline-offset-2">Create an account</Link>
-            </p>
           </form>
-          <p className="mt-4 text-center text-xs text-[#9AA9B7]">Prototype only: mock session stored in localStorage, replaceable by a real auth API later.</p>
+          <p className="mt-4 text-center text-[13px] text-[#7a6f6a]">Belum punya akun warga? <Link href="/daftar" className="font-bold text-[#c06b4a] hover:underline">Daftar di sini</Link></p>
         </div>
-      </div>
+      </main>
+      <PublicFooter />
     </div>
   );
 }

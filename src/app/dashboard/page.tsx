@@ -1,234 +1,268 @@
 "use client";
-
-import React from "react";
+import { parseJsonResponse } from "@/lib/utils";
+import { mockApiFetch } from "@/lib/mock-api";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, CircleAlert, FileText, Inbox, Plus } from "lucide-react";
-import { useCivic } from "@/lib/store";
-import { STATUS_META, statusToStageIndex, PIPELINE_STAGES } from "@/types";
-import { daysUntil, formatDate, isOverdue, progressForStatus, timeAgo } from "@/lib/utils";
-import { DemoBanner, OverdueFlag, ProgressBar, ProgressRing, StatusPill } from "@/components/ui";
+import { useEffect, useState } from "react";
+import { FilePlus2, Clock, Star, ArrowRight, Zap, AlertTriangle } from "lucide-react";
+import { AppShell } from "@/components/AppShell";
+import { useMe } from "@/components/useMe";
+import { StatusBadge, PriorityBadge } from "@/components/StatusBadge";
+import { Skeleton } from "@/components/ui";
+import { formatDateWIB } from "@/lib/sla";
 
-export default function DashboardOverview() {
-  const { user, myRequests, myNotifications, unreadCount } = useCivic();
-  if (!user) return null;
+export default function DashboardPage() {
+  const { me, loading } = useMe();
+  const [stats, setStats] = useState<any>(null);
+  const [apps, setApps] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
 
-  const total = myRequests.length;
-  const inProgress = myRequests.filter((r) => ["submitted", "under_review"].includes(r.status)).length;
-  const actionNeeded = myRequests.filter((r) => r.status === "action_required").length;
-  const completed = myRequests.filter((r) => ["completed", "approved"].includes(r.status)).length;
-  const recent = [...myRequests].sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)).slice(0, 5);
-  const actionList = myRequests.filter((r) => r.status === "action_required");
-  const latest = myRequests.find((r) => !["draft"].includes(r.status)) ?? myRequests[0];
-  const latestNotifs = myNotifications.slice(0, 4);
+  useEffect(() => {
+    if (!me) return;
+    Promise.all([
+      mockApiFetch("/api/dashboard/stats?range=6m").then((r) => parseJsonResponse(r)).catch(() => ({})),
+      mockApiFetch("/api/applications").then((r) => parseJsonResponse(r)).catch(() => ({ applications: [] })),
+    ]).then(([s, a]) => {
+      setStats(s);
+      setApps(a.applications ?? []);
+    }).finally(() => setLoadingData(false));
+  }, [me]);
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const firstName = user.name.split(" ")[0];
+  if (loading || !me) return <div className="grid min-h-screen place-items-center bg-[#f4e9de]"><div className="card-soft p-8">Memuat…</div></div>;
 
   return (
-    <div className="space-y-6">
-      {/* welcome */}
-      <div className="mesh-header grain relative overflow-hidden rounded-[28px] border border-[#DCE4E9] px-6 py-7 sm:px-9">
-        <div className="blob -right-14 -top-16 h-60 w-60 rounded-[46%_54%_52%_48%/48%_46%_54%_52%] bg-gradient-to-br from-[#A3CEF1] to-transparent opacity-60 blur-2xl" />
-        <div className="relative flex flex-wrap items-center gap-6">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#6096BA]">
-              {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
-            </p>
-            <h1 className="font-display mt-1.5 text-3xl font-medium sm:text-4xl">
-              {greeting}, {firstName}.
-            </h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#4A5C6E]">
-              {total === 0
-                ? "You have no requests yet — file your first one and watch it move."
-                : `You have ${total} request${total === 1 ? "" : "s"} · ${inProgress} in progress${actionNeeded ? ` · ${actionNeeded} need${actionNeeded === 1 ? "s" : ""} your attention` : ""}.`}
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2.5">
-              <Link href="/dashboard/requests/new" className="cut-corner-sm inline-flex items-center gap-2 bg-[#274C77] px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-[#1e3c5e]">
-                <Plus size={15} /> New request
-              </Link>
-              <Link href="/dashboard/requests" className="inline-flex items-center gap-2 rounded-full border border-[#274C77] bg-white/70 px-5 py-2.5 text-[13px] font-semibold text-[#274C77] hover:bg-white">
-                View all <ArrowRight size={14} />
-              </Link>
-            </div>
-          </div>
-          {/* metric orbit strip */}
-          <div className="flex items-center gap-5 rounded-3xl border border-white/60 bg-white/70 px-6 py-4 backdrop-blur">
-            {[
-              { v: total, l: "Total", c: "#274C77" },
-              { v: inProgress, l: "In progress", c: "#6096BA" },
-              { v: actionNeeded, l: "Action", c: "#B78032" },
-              { v: completed, l: "Done", c: "#39856A" },
-            ].map((m) => (
-              <div key={m.l} className="text-center">
-                <p className="font-display text-2xl font-semibold" style={{ color: m.c }}>{m.v}</p>
-                <p className="text-[11px] font-medium text-[#647587]">{m.l}</p>
-              </div>
-            ))}
-          </div>
+    <AppShell user={me} title={`Selamat Datang, ${me.name.split(" ")[0]}`} subtitle="Pantau pengajuan dan urus kebutuhan administrasi Anda dengan lebih mudah.">
+      {loadingData ? (
+        <div className="grid gap-4 md:grid-cols-3"><Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" /></div>
+      ) : (
+        <RoleDashboard me={me} stats={stats} apps={apps} />
+      )}
+    </AppShell>
+  );
+}
+
+function RoleDashboard({ me, stats, apps }: any) {
+  if (me.role === "WARGA") return <WargaDash me={me} stats={stats} apps={apps} />;
+  if (me.role === "PETUGAS") return <PetugasDash stats={stats} apps={apps} />;
+  if (me.role === "RT_RW") return <RtDash apps={apps} />;
+  if (me.role === "LURAH") return <LurahDash stats={stats} apps={apps} />;
+  if (me.role === "CAMAT") return <CamatDash apps={apps} />;
+  return null;
+}
+
+function WargaDash({ me, stats, apps }: any) {
+  const mine = stats?.mine;
+  const popular = apps.slice(0, 3);
+  return (
+    <div className="space-y-5">
+      <div className="hero-plum rounded-[24px] p-6 text-white sm:p-7">
+        <p className="text-[13px] font-bold text-white/70">Dashboard layanan publik Kelurahan Contoh</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          {[
+            ["Total pengajuan", mine?.total ?? 0],
+            ["Selesai", mine?.selesai ?? 0],
+            ["Perlu perbaikan", mine?.perluPerbaikan ?? 0],
+          ].map(([l, v]) => (
+            <div key={l as string} className="rounded-2xl bg-white/12 p-4"><p className="text-[26px] font-extrabold">{v}</p><p className="text-[12px] font-bold text-white/75">{l}</p></div>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link href="/pengajuan/baru" className="btn-terra rounded-xl px-5 py-2.5 text-sm font-extrabold"><FilePlus2 size={15} className="mr-1 inline" /> Buat Pengajuan</Link>
+          <Link href="/tracking" className="rounded-xl bg-white/15 px-5 py-2.5 text-sm font-extrabold hover:bg-white/25">Lacak Status →</Link>
         </div>
       </div>
 
-      <DemoBanner />
-
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        {/* recent requests */}
-        <section className="rounded-3xl border border-[#DCE4E9] bg-white p-5 sm:p-6" aria-label="Recent requests">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-lg font-semibold">Recent requests</h2>
-            <Link href="/dashboard/requests" className="inline-flex items-center gap-1 text-[13px] font-semibold text-[#274C77]">
-              All requests <ArrowUpRight size={14} />
-            </Link>
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[17px] font-extrabold">Pengajuan Terbaru</h2>
+            <Link href="/pengajuan" className="ml-auto text-[13px] font-bold text-[#c06b4a]">Lihat semua →</Link>
           </div>
-          {recent.length === 0 ? (
-            <div className="mt-4 rounded-2xl bg-[#F7F9FA] p-8 text-center">
-              <FileText size={22} className="mx-auto text-[#9AA9B7]" />
-              <p className="mt-2 text-sm font-semibold">No requests yet</p>
-              <p className="mx-auto mt-1 max-w-xs text-[13px] text-[#647587]">Create your first administrative request to see tracking, timelines, and reminders here.</p>
-              <Link href="/dashboard/requests/new" className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#274C77] px-5 py-2.5 text-[13px] font-semibold text-white">
-                <Plus size={14} /> Create request
+          <div className="mt-3 space-y-2.5">
+            {(mine?.recent ?? []).length === 0 && <div className="card-soft p-6 text-center text-sm text-[#7a6f6a]">Belum ada pengajuan. <Link href="/pengajuan/baru" className="font-bold text-[#c06b4a]">Buat pertama →</Link></div>}
+            {(mine?.recent ?? []).map((a: any) => (
+              <Link key={a.id} href={`/pengajuan/${a.id}`} className="card-soft flex items-center gap-3 p-4 hover:shadow-md">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f7e8df]">📄</span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[14px] font-extrabold">{a.serviceName} • {a.applicationNumber}</span>
+                  <span className="block text-[12px] text-[#7a6f6a]">Estimasi: {a.dueAt ? formatDateWIB(a.dueAt) : "setelah verifikasi"}</span>
+                </span>
+                <span className="ml-auto flex shrink-0 flex-col items-end gap-1"><StatusBadge status={a.status} /></span>
               </Link>
-            </div>
-          ) : (
-            <ul className="mt-4 divide-y divide-[#EDF1F4]">
-              {recent.map((r) => (
-                <li key={r.id}>
-                  <Link href={`/dashboard/requests/${r.id}`} className="group flex items-center gap-4 py-3.5">
-                    <span className="hidden h-10 w-1.5 shrink-0 rounded-full sm:block" style={{ background: STATUS_META[r.status].dot }} aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[11px] font-semibold text-[#274C77]">{r.id}</span>
-                        <StatusPill status={r.status} size="sm" />
-                        <OverdueFlag targetAt={r.targetCompletionAt} status={r.status} />
-                      </div>
-                      <p className="mt-1 truncate text-sm font-semibold text-[#1D2C3B] group-hover:text-[#274C77]">{r.title}</p>
-                      <p className="truncate text-xs text-[#647587]">{r.documentType} · updated {timeAgo(r.updatedAt)}</p>
-                    </div>
-                    <ArrowRight size={16} className="shrink-0 text-[#9AA9B7] transition group-hover:translate-x-1 group-hover:text-[#274C77]" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* latest progress */}
-        <section className="cut-corner relative overflow-hidden bg-gradient-to-br from-[#274C77] to-[#3f6d9e] p-6 text-white" aria-label="Latest progress">
-          <div className="grain absolute inset-0" />
-          <div className="absolute -right-16 -bottom-16 h-52 w-52 rounded-full bg-white/10 blur-2xl" />
-          <div className="relative">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#A3CEF1]">Now tracking</p>
-            {latest ? (
-              <>
-                <p className="font-mono mt-2 text-xs text-white/70">{latest.id}</p>
-                <h3 className="font-display mt-1 text-xl font-semibold leading-snug">{latest.title}</h3>
-                <div className="mt-4 flex items-center gap-5">
-                  <ProgressRing value={progressForStatus(latest.status, latest.createdAt, latest.targetCompletionAt)} size={108} stroke={10} label={`${progressForStatus(latest.status, latest.createdAt, latest.targetCompletionAt)}%`} sub={STATUS_META[latest.status].label} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] leading-relaxed text-white/80">{STATUS_META[latest.status].description}</p>
-                    <p className="mt-2 text-xs text-[#A3CEF1]">
-                      {isOverdue(latest.targetCompletionAt, latest.status)
-                        ? "Past sample target — flagged for review"
-                        : `Sample estimate: ${formatDate(latest.targetCompletionAt)} (${daysUntil(latest.targetCompletionAt)}d)`}
-                    </p>
-                    <Link href={`/dashboard/requests/${latest.id}`} className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs font-bold text-[#274C77]">
-                      Open timeline <ArrowRight size={13} />
-                    </Link>
-                  </div>
-                </div>
-                {/* mini stages */}
-                <div className="mt-5 flex items-center gap-1.5" aria-hidden>
-                  {PIPELINE_STAGES.map((s, i) => {
-                    const idx = statusToStageIndex(latest.status);
-                    return (
-                      <span key={s.key} className="flex flex-1 items-center gap-1.5">
-                        <span className={`h-2 flex-1 rounded-full ${i <= idx ? "bg-[#A3CEF1]" : "bg-white/20"}`} />
-                      </span>
-                    );
-                  })}
-                </div>
-                <div className="mt-1.5 flex justify-between text-[10px] text-white/60">
-                  <span>Received</span><span>Issuance</span>
-                </div>
-              </>
-            ) : (
-              <p className="mt-3 text-sm text-white/80">No active file yet.</p>
-            )}
+            ))}
           </div>
-        </section>
+        </div>
+        <div>
+          <h2 className="text-[17px] font-extrabold">Edukasi Terkait</h2>
+          <div className="card-soft mt-3 p-4">
+            <div className="flex gap-1.5 text-[11px] font-bold">
+              {["KTP", "KK", "Pengantar RT"].map((t) => <span key={t} className="rounded-full bg-[#f7e8df] px-2.5 py-1">{t}</span>)}
+            </div>
+            <ul className="mt-2 space-y-1.5 rounded-xl bg-[#2b2320] p-3.5 text-[13px] text-white">
+              <li>☑ KTP-el — identitas pemohon</li>
+              <li>☑ KK — susunan keluarga</li>
+              <li>☐ Surat pernyataan bermaterai</li>
+            </ul>
+            <p className="mt-2 text-[13px]"><b>Estimasi: 2 hari</b> <span className="text-[#7a6f6a]">• dihitung setelah verifikasi</span></p>
+            <Link href="/pengajuan/baru" className="btn-terra mt-2 inline-block rounded-xl px-4 py-2 text-[13px] font-bold">Ajukan Pengajuan</Link>
+          </div>
+          <div className="card-soft mt-3 p-4">
+            <p className="text-[14px] font-extrabold">Layanan populer</p>
+            <div className="mt-2 space-y-1.5">
+              {[["Domisili", "/pengajuan/baru?layanan=domisili"], ["Kematian", "/pengajuan/baru?layanan=kematian"], ["SKTM", "/pengajuan/baru?layanan=sktm"]].map(([n, h]) => (
+                <Link key={n} href={h} className="flex items-center justify-between rounded-xl bg-[#faf5ef] px-3 py-2 text-[13px] font-bold hover:bg-[#f4e9de]">{n} <ArrowRight size={14} /></Link>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* action required */}
-        <section className="rounded-3xl border border-[#DCE4E9] bg-white p-5 sm:p-6" aria-label="Action required">
-          <div className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#F7EBCF] text-[#7A5A1F]"><CircleAlert size={17} /></span>
-            <div>
-              <h2 className="font-display text-lg font-semibold">Action required</h2>
-              <p className="text-xs text-[#647587]">{actionList.length ? `${actionList.length} file${actionList.length === 1 ? "" : "s"} waiting on you` : "Nothing waiting on you right now"}</p>
-            </div>
-          </div>
-          {actionList.length === 0 ? (
-            <p className="mt-4 rounded-2xl bg-[#EFF6F1] px-4 py-3.5 text-[13px] text-[#2E6B57]">All clear — no missing documents or confirmations pending.</p>
-          ) : (
-            <ul className="mt-4 space-y-3">
-              {actionList.map((r) => (
-                <li key={r.id} className="rounded-2xl border border-[#E8D9B5] bg-[#FFFaf0] p-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[11px] font-bold text-[#7A5A1F]">{r.id}</span>
-                    <OverdueFlag targetAt={r.targetCompletionAt} status={r.status} />
-                  </div>
-                  <p className="mt-1 text-sm font-semibold">{r.title}</p>
-                  <ul className="mt-2 space-y-1">
-                    {r.requiredActions.map((a) => (
-                      <li key={a} className="flex items-start gap-2 text-[13px] text-[#5c4a1f]"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#B78032]" />{a}</li>
-                    ))}
-                  </ul>
-                  <Link href={`/dashboard/requests/${r.id}`} className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#274C77] px-4 py-2 text-xs font-semibold text-white">
-                    Resolve now <ArrowRight size={13} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* notifications */}
-        <section className="rounded-3xl border border-[#DCE4E9] bg-white p-5 sm:p-6" aria-label="Recent notifications">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-[#E7ECEF] text-[#274C77]"><Inbox size={17} /></span>
-              <div>
-                <h2 className="font-display text-lg font-semibold">Recent notifications</h2>
-                <p className="text-xs text-[#647587]">{unreadCount} unread · prototype messages</p>
-              </div>
-            </div>
-            <Link href="/dashboard/inbox" className="inline-flex items-center gap-1 text-[13px] font-semibold text-[#274C77]">Inbox <ArrowUpRight size={14} /></Link>
-          </div>
-          {latestNotifs.length === 0 ? (
-            <p className="mt-4 text-sm text-[#647587]">No messages yet.</p>
-          ) : (
-            <ul className="mt-4 space-y-2.5">
-              {latestNotifs.map((n) => (
-                <li key={n.id}>
-                  <Link href={n.requestId ? `/dashboard/requests/${n.requestId}` : "/dashboard/inbox"} className="flex gap-3 rounded-2xl border border-[#EDF1F4] bg-[#F7F9FA] p-3.5 transition hover:border-[#6096BA66] hover:bg-white">
-                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.isRead ? "bg-[#DCE4E9]" : "bg-[#6096BA]"}`} />
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold">{n.title}</span>
-                      <span className="mt-0.5 line-clamp-1 block text-xs text-[#647587]">{n.message}</span>
-                      <span className="mt-1 block text-[11px] text-[#9AA9B7]">{timeAgo(n.createdAt)}</span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="mt-4">
-            <ProgressBar value={total ? Math.round((completed / Math.max(1, total)) * 100) : 0} />
-            <p className="mt-1.5 text-[11px] text-[#647587]">{completed} of {total} requests completed or approved · derived live from your files</p>
-          </div>
-        </section>
+function PetugasDash({ stats, apps }: any) {
+  const s = stats?.summary ?? {};
+  const needVerify = apps.filter((a: any) => a.status === "MENUNGGU_VERIFIKASI");
+  const priority = apps.filter((a: any) => a.isPriority && a.priorityStatus === "PENDING");
+  const late = stats?.lateList ?? [];
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          ["Perlu verifikasi", s.needVerify ?? needVerify.length, "Menunggu Verifikasi", "/verifikasi"],
+          ["Prioritas pending", s.priorityPending ?? priority.length, "Keputusan prioritas", "/prioritas"],
+          ["Terlambat", s.terlambat ?? 0, "Perlu perhatian", "/monitoring"],
+          ["Total 6 bln", s.total ?? apps.length, "Semua pengajuan", "/pengajuan"],
+        ].map(([l, v, d, h]) => (
+          <Link key={l as string} href={h as string} className="card-soft p-4 hover:shadow-md">
+            <p className="text-[26px] font-extrabold text-[#5f3d4e]">{v}</p>
+            <p className="text-[13px] font-extrabold">{l}</p>
+            <p className="text-[12px] text-[#7a6f6a]">{d}</p>
+          </Link>
+        ))}
       </div>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div>
+          <h2 className="text-[16px] font-extrabold">Pengajuan masuk terbaru</h2>
+          <div className="mt-2 space-y-2">
+            {apps.slice(0, 5).map((a: any) => (
+              <Link key={a.id} href={`/pengajuan/${a.id}`} className="card-soft flex items-center gap-3 p-3.5 hover:shadow-md">
+                <span className="min-w-0"><span className="block truncate text-[14px] font-extrabold">{a.serviceName} • {a.applicationNumber}</span><span className="text-[12px] text-[#7a6f6a]">{a.ownerName}</span></span>
+                <span className="ml-auto"><StatusBadge status={a.status} /></span>
+              </Link>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h2 className="flex items-center gap-1.5 text-[16px] font-extrabold"><AlertTriangle size={16} className="text-[#c06b4a]" /> Terlambat / perlu perhatian</h2>
+          <div className="mt-2 space-y-2">
+            {late.length === 0 && <div className="card-soft p-5 text-sm text-[#7a6f6a]">Tidak ada yang terlambat. 🎉</div>}
+            {late.map((a: any) => (
+              <Link key={a.id} href={`/pengajuan/${a.id}`} className="card-soft border-red-200 p-3.5">
+                <p className="text-[14px] font-extrabold">{a.serviceName} • {a.applicationNumber}</p>
+                <p className="text-[12px] text-[#991b1b] font-bold">Terlambat — {a.delayReason ?? "segera perbarui estimasi dengan alasan"}</p>
+              </Link>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link href="/verifikasi" className="btn-primary rounded-xl px-4 py-2.5 text-[13px] font-bold">Buka Verifikasi</Link>
+            <Link href="/prioritas" className="rounded-xl border border-[#5f3d4e] px-4 py-2.5 text-[13px] font-bold text-[#5f3d4e]"><Zap size={13} className="mr-1 inline" /> Antrean Prioritas</Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RtDash({ apps }: any) {
+  const waiting = apps.filter((a: any) => a.status === "MENUNGGU_RT_RW");
+  const done = apps.filter((a: any) => !["MENUNGGU_RT_RW", "MENUNGGU_VERIFIKASI"].includes(a.status)).slice(0, 6);
+  return (
+    <div className="space-y-5">
+      <div className="card-blush rounded-[20px] p-6">
+        <p className="text-[15px] font-extrabold">Menunggu persetujuan Anda: {waiting.length} pengajuan</p>
+        <p className="text-[13px] text-[#5f3d4e]">Periksa data warga, setujui atau kembalikan dengan alasan tertulis. Tindakan tercatat + notifikasi otomatis.</p>
+        <Link href="/persetujuan" className="btn-primary mt-3 inline-block rounded-xl px-5 py-2.5 text-sm font-bold">Buka Persetujuan →</Link>
+      </div>
+      <h2 className="text-[16px] font-extrabold">Butuh tindakan</h2>
+      <div className="space-y-2">
+        {waiting.length === 0 && <div className="card-soft p-6 text-center text-sm text-[#7a6f6a]">Tidak ada yang menunggu. Semua clear ✅</div>}
+        {waiting.map((a: any) => (
+          <Link key={a.id} href={`/pengajuan/${a.id}`} className="card-soft flex items-center gap-3 border-orange-200 p-4">
+            <span><span className="block text-[14px] font-extrabold">{a.serviceName} • {a.applicationNumber}</span><span className="text-[12px] text-[#7a6f6a]">{a.ownerName} • {a.isPriority ? "⚡ Prioritas" : "Reguler"}</span></span>
+            <span className="ml-auto"><StatusBadge status={a.status} /></span>
+          </Link>
+        ))}
+      </div>
+      <h2 className="text-[16px] font-extrabold">Riwayat</h2>
+      <div className="space-y-2">
+        {done.map((a: any) => (
+          <Link key={a.id} href={`/pengajuan/${a.id}`} className="card-soft flex items-center gap-3 p-3.5 opacity-90">
+            <span className="text-[14px] font-bold">{a.serviceName} • {a.applicationNumber}</span>
+            <span className="ml-auto"><StatusBadge status={a.status} /></span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LurahDash({ stats, apps }: any) {
+  const s = stats?.summary ?? {};
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          [`${s.onTimePct ?? 0}%`, `Tepat waktu (${(s.delta ?? 0) >= 0 ? "+" : ""}${s.delta ?? 0}% vs bln lalu)`, "/akuntabilitas"],
+          [`${s.avgDays ?? 0} hari`, "Rata-rata proses", "/akuntabilitas"],
+          [`${s.lurahAvg ?? 0}/5`, `Rating Lurah (${s.lurahCount ?? 0} penilaian)`, "/akuntabilitas"],
+          [`${s.ratingAvg ?? 0}/5`, `Rating layanan (${s.ratingCount ?? 0})`, "/akuntabilitas"],
+        ].map(([v, l, h]) => (
+          <Link key={l as string} href={h as string} className="card-soft p-4 hover:shadow-md">
+            <p className="text-[22px] font-extrabold text-[#5f3d4e]">{v}</p><p className="text-[12px] font-bold text-[#7a6f6a]">{l}</p>
+          </Link>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-4">
+        {[["Menunggu Lurah", s.waitingLurah ?? 0, "/persetujuan"], ["Menunggu RT/RW", s.waitingRT ?? 0, "/monitoring"], ["Prioritas", s.priorityCount ?? 0, "/monitoring"], ["Terlambat", s.terlambat ?? 0, "/monitoring"]].map(([l, v, h]) => (
+          <Link key={l as string} href={h as string} className="card-soft p-3.5 text-center hover:shadow-md"><p className="text-xl font-extrabold">{v}</p><p className="text-[12px] font-bold text-[#7a6f6a]">{l}</p></Link>
+        ))}
+      </div>
+      <div>
+        <div className="flex items-center"><h2 className="text-[16px] font-extrabold">Menunggu persetujuan Lurah</h2><Link href="/persetujuan" className="ml-auto text-[13px] font-bold text-[#c06b4a]">Buka semua →</Link></div>
+        <div className="mt-2 space-y-2">
+          {apps.filter((a: any) => a.status === "MENUNGGU_LURAH").slice(0, 5).map((a: any) => (
+            <Link key={a.id} href={`/pengajuan/${a.id}`} className="card-soft flex items-center gap-3 border-orange-200 p-3.5">
+              <span className="text-[14px] font-extrabold">{a.serviceName} • {a.applicationNumber} <span className="font-normal text-[#7a6f6a]">— {a.ownerName}</span></span>
+              <span className="ml-auto flex gap-1.5"><PriorityBadge isPriority={a.isPriority} priorityStatus={a.priorityStatus} /><StatusBadge status={a.status} /></span>
+            </Link>
+          ))}
+          {apps.filter((a: any) => a.status === "MENUNGGU_LURAH").length === 0 && <div className="card-soft p-5 text-sm text-[#7a6f6a]">Tidak ada antrean. 🎉</div>}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Link href="/akuntabilitas" className="btn-primary rounded-xl px-4 py-2.5 text-[13px] font-bold">Akuntabilitas SLA</Link>
+        <Link href="/laporan" className="rounded-xl border border-[#5f3d4e] px-4 py-2.5 text-[13px] font-bold text-[#5f3d4e]">Laporan Pelayanan</Link>
+        <Link href="/petugas" className="rounded-xl border border-[#e2c9b8] bg-white px-4 py-2.5 text-[13px] font-bold">Kelola Petugas</Link>
+      </div>
+    </div>
+  );
+}
+
+function CamatDash({ apps }: any) {
+  const waiting = apps.filter((a: any) => a.status === "MENUNGGU_CAMAT");
+  return (
+    <div className="space-y-4">
+      <div className="card-blush rounded-[20px] p-6">
+        <p className="font-extrabold">Persetujuan Camat (khusus Ahli Waris): {waiting.length} menunggu</p>
+        <p className="text-[13px]">Anda hanya berwenang pada pengajuan yang memerlukan persetujuan Camat.</p>
+        <Link href="/persetujuan" className="btn-primary mt-3 inline-block rounded-xl px-5 py-2.5 text-sm font-bold">Buka Persetujuan →</Link>
+      </div>
+      {waiting.map((a: any) => (
+        <Link key={a.id} href={`/pengajuan/${a.id}`} className="card-soft flex items-center gap-3 p-4">
+          <span className="text-[14px] font-extrabold">{a.serviceName} • {a.applicationNumber}</span>
+          <span className="ml-auto"><StatusBadge status={a.status} /></span>
+        </Link>
+      ))}
     </div>
   );
 }

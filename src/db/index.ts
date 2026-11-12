@@ -1,6 +1,5 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as schema from "./schema";
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -9,20 +8,17 @@ if (!databaseUrl) {
 }
 
 const globalForDb = globalThis as typeof globalThis & {
-  __civicflowPool?: Pool;
+  __arenaNextJsPostgresqlPool?: Pool;
 };
 
 export const pool =
-  globalForDb.__civicflowPool ??
+  globalForDb.__arenaNextJsPostgresqlPool ??
   new Pool({
     connectionString: databaseUrl,
   });
 
 if (process.env.NODE_ENV !== "production") {
-  globalForDb.__civicflowPool = pool;
+  globalForDb.__arenaNextJsPostgresqlPool = pool;
 }
 
-// Schema-aware client: required by the better-auth drizzle adapter
-// and used by all CivicFlow API routes.
-export const db = drizzle(pool, { schema });
-export type Db = typeof db;
+export const db = drizzle(pool);
